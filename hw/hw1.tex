@@ -1,0 +1,67 @@
+\documentclass[titlepage]{article}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    urlcolor=blue,
+}
+\urlstyle{same}
+ 
+\title{CS 133 Homework 1}
+\author{Robert Geil \\ University of California, Los Angeles}
+\begin{document}
+\maketitle
+\subsubsection*{1. Find out the number of cores of the processors in your cell phone and laptop/desktop.
+Specify their types, if known.}
+In my laptop (MacBook Pro, early 2015), there are \textbf{2 cores} in an Intel i5 processor. In my phone
+(iPhone 8) there is an A11 processor with \textbf{6 cores}, two of which are more powerful cores and four
+that are more energy efficient
+
+\subsubsection*{2. What is Dennard Scaling? What caused its breakdown?}
+Dennard Scaling is the reduction of transistor dimensions by 30\% every two years. This has the benefit of
+reducing transistor area by about 50\%, as well as reducing delay, power and energy. Smaller transistors
+also allow for deeper pipelines and better instruction level parallelism. Dennard Scaling broke down due
+to voltage leakage, where the threshold of voltage was so low that electrons would leak across the transistor.
+This means that voltage cannot continue to scale down with the rest of the chip, and therefore more power
+must be used for higher frequencies, increasing temperatures to unacceptable levels
+
+\subsubsection*{3. Please compute the power efficiency of the Top-10 supercomputers announced in
+Nov. 2019, and list the top-3 most power efficient supercomputers. Please use the
+measurement in terms of Rmax/Power (you can compute only those whose Power
+numbers are available).}
+\begin{center}
+    \begin{tabular}{ |c|c|c|c|c| } 
+     \hline
+     Computer & Rmax (TFlops/s) & Power (kW) & Efficiency\\ 
+     \hline
+        Summit & 148,600.0 & 10,096 & 14.72\\ 
+        Sierra & 94,640.0 & 7,438 & 12.65\\
+        Sunway TaihuLight & 93,014.6 & 15,371 & 6.05\\
+        Tianhe-2A & 61,444.5 & 18,482 & 3.32\\
+        Frontera & 23,516.4 & N/A & N/A \\
+        Piz Daint & 21,230.0 & 2,384 & 8.91 \\
+        Trinity & 20,158.7 & 7,578 & 2.66\\
+        ABCI & 19,880.0 & 1,649 & 12.06\\
+        SuperMUC-NG & 19,476.6 & N/A & N/A \\
+        Lassen & 18,200.0 & N/A & N/A\\    
+     \hline
+    \end{tabular}
+\end{center}
+The three most efficient supercomputers, as measured by Gigaflops/Watt are as follows
+\begin{center}
+    \begin{tabular}{ |c|c|c| } 
+     \hline
+     Computer & Power (kW) & Gigaflops/Watt\\ 
+     \hline
+        A64FX prototype & 118 & 16.876 \\
+        NA-1 & 80 & 16.256 \\
+        AiMOS & 510 & 15.771 \\
+     \hline
+    \end{tabular}
+\end{center}
+Sourced from \href{https://www.top500.org/green500/list/2019/11/}{Top500}
+\subsubsection*{4. Given an integer array a[ ] of N elements. Please write an OpenMP function to sort it
+by the Quicksort algorithm using the task directive. The function header is: void
+quicksort(int *a, int p, int r). (p represents the start index and r
+represents the end index)}
+
+\end{document}

@@ -5,7 +5,35 @@
     urlcolor=blue,
 }
 \urlstyle{same}
- 
+\usepackage{xcolor}
+\usepackage{listings}
+
+\definecolor{mGreen}{rgb}{0,0.6,0}
+\definecolor{mGray}{rgb}{0.5,0.5,0.5}
+\definecolor{mPurple}{rgb}{0.58,0,0.82}
+\definecolor{backgroundColour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{CStyle}{
+    backgroundcolor=\color{backgroundColour},   
+    commentstyle=\color{mGreen},
+    keywordstyle=\color{blue},
+    numberstyle=\tiny\color{mGray},
+    stringstyle=\color{mPurple},
+    basicstyle=\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    language=C
+}
+
+
 \title{CS 133 Homework 1}
 \author{Robert Geil \\ University of California, Los Angeles}
 \begin{document}
@@ -59,9 +87,97 @@ The three most efficient supercomputers, as measured by Gigaflops/Watt are as fo
     \end{tabular}
 \end{center}
 Sourced from \href{https://www.top500.org/green500/list/2019/11/}{Top500}
-\subsubsection*{4. Given an integer array a[ ] of N elements. Please write an OpenMP function to sort it
+
+\subsubsection*{4. Given an integer array a[] of N elements. Please write an OpenMP function to sort it
 by the Quicksort algorithm using the task directive. The function header is: void
 quicksort(int *a, int p, int r). (p represents the start index and r
 represents the end index)}
+\begin{lstlisting}[style=CStyle]
+void quicksort(int *a, int p, int r)
+{
+    if(p = = r) return;
+    // Partition the list
+    int pivot = a[r-1];
+    int pivot_pos = p;
+    for(int i = p; i < r; ++i)
+    {
+        if(a[i] < pivot)
+        {
+            int temp = a[pivot_pos];
+            a[pivot_pos] = a[i];
+            a[i] = temp;
+            pivot_pos++;
+        }
+    }
+    int temp = a[pivot_pos];
+    a[pivot_pos] = a[r-1];
+    a[r-1] = a[pivot_pos];
+    // Recursive calls to quicksort on the top and bottom portions of the list
+    #pragma omp task
+    quicksort(a, p, pivot_pos);
+    #pragma omp task
+    quicksort(a, pivot_pos, r);
+}
+\end{lstlisting}
 
+\subsubsection*{5. For the all-pair shortest path code provided in Lecture 2}
+\subsubsection*{(i) Please list all data dependencies and their types}
+Within the All-Pair Shortest Path code, there is a \textbf{loop carried dependency} in the outermost
+for-loop. This occurs because values from the $a$ matrix are modified on each iteration of the loop, and
+are then inputs for calculations on the next iteration, meaning that they cannot be done out-of-order, as
+that would give incorrect results
+
+\subsubsection*{(ii) Please examine the following loop transformation operations discussed in Lecture 3. 
+Please discuss which one can be applied and which one cannot be. For some transformations, they can 
+be applied to some loops, but not others. Please discuss both cases.}
+\subsubsection*{Loop Permutation}
+Performing loop permutation is legal on the inner two loops (those that iterate over $i$ and $j$), as the 
+order of the computation doesn't impact the result. However, because of the loop carried dependency of the
+outermost loop, that once cannot be permuted
+\subsubsection*{Loop Distribution}
+Loop distribution doesn't make much sense in the context of the All-Pair Shortest Path, as there is only
+one assignment performed within the body of the loop
+\subsubsection*{Loop Fusion}
+Similarly with Loop Distribution, there is only one loop with a single statement being executed, and therefore
+there is nothing to fuse together
+\subsubsection*{Loop Peeling}
+Loop Peeling, typically used to split out a special (usually first or last) case of a loop doesn't apply here,
+as there doesn't appear to be any special logic that can be streamlined by moving it before or after the
+series of loops
+\subsubsection*{Loop Shifting}
+Loop shifting could be done with the All-Pair Shortest Path, although the data are already aligned well.
+\subsubsection*{Loop Unrolling}
+Unrolling could be used on the inner statement by increasing $j$'s increment value, which may allow for
+better pipelining, fewer jumps, etc.
+\subsubsection*{Loop Strip-Mining}
+Strip-Mining could be used especially with the $i$ and $j$ loops as to improve the spacial locality of
+especially the $b$ matrix.
+\subsubsection*{Loop Unroll-and-Jam}
+Loop Unroll-and-Jam could be used to update multiple a locations in a single iteration of a loop, while
+increasing spacial locality of memory with the $a$ and $b$ matricies
+\subsubsection*{Loop Tiling}
+Since this operates in the same way as Loop Unroll-and-Jam, this could also be done on the All-Pair Shortest
+Path algorithm to improve locality.
+\subsubsection*{Loop Parallelization}
+Both the inner two loops are candidates for parallelization, as they carry no dependencies. However, as stated
+above, the first loop has a loop carried dependency, and cannot therefore be parallelized
+\subsubsection*{Loop Vectorization}
+Loop Vectorization, as it achieves the same effect as Strip Mining and is always legal could be performed here,
+allowing possible usage of SIMD operations within the CPU
+
+\subsubsection*{6. There is a list of $n$ independent tasks with known (but considerably different) runtimes to be
+performed by $m$ processors. We order the tasks in a list and assign each task in the order of
+the list to the first available idle processor until all tasks are completed (so called the list
+scheduling). Once a processor finishes a task, it requests a new task. Alice sorts the list in
+decreasing order of the task runtimes and then performs list scheduling. Bob sorts the list in
+increasing order of the task runtimes and then performs list scheduling. Who do you expect to
+finish first? Please explain why}
+Given the above scenario, I expect \textbf{Alice} to finish first. To see why, I consider the small case where $n = 4$ and
+$m = 2$. Assume that the tasks take time 1, 2, 3, and 4 respectively. Using Alice's ordering, processors 1 and 2 are first assigned to
+tasks 3 and 4. Processor 2 finishes task 3 and is handed task 2. One unit later, processor 1 is handed task 1. With this work distribution,
+we see that both processor 1 and 2 have 5 units of task to complete. On the other hand, Bob's increasing order sees processor 1 get task 1
+and processor 2 get task 2. Processor 1 finishes at $t=1$ and then gets task 3, taking 4 units overall to complete both tasks. However,
+processor 2 after 2 units is given task 4, so its total time is $t=6$ which is worse than Alice's case. The main reason for this is with Bob's
+ordering, tasks that initally take a long time are then handed even longer tasks afterward, as the short tasks are greedily taken. With Alice,
+the faster a given task is completed, the longer the next task that is given, leading to a more balanced distribution of work.
 \end{document}

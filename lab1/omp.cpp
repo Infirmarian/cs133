@@ -15,7 +15,6 @@ void GemmParallel(const float a[kI][kK], const float b[kK][kJ],
   {
     for (k = 0; k < kK; ++k)
     {
-#pragma omp simd
       for (j = 0; j < kJ; ++j)
       {
         c[i][j] += a[i][k] * b[k][j];

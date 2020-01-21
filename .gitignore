@@ -8,4 +8,7 @@
 *.synctex.gz
 *.pdf
 *.out
+*.bbl
+*.bib
+*.blg
 cs-133-20w

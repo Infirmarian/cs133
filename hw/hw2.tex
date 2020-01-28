@@ -1,0 +1,140 @@
+\documentclass[titlepage]{article}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    urlcolor=blue,
+}
+\urlstyle{same}
+\usepackage{xcolor}
+\usepackage{listings}
+\def\code#1{\texttt{#1}}
+\definecolor{mGreen}{rgb}{0,0.6,0}
+\definecolor{mGray}{rgb}{0.5,0.5,0.5}
+\definecolor{mPurple}{rgb}{0.58,0,0.82}
+\definecolor{backgroundColour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{CStyle}{
+    backgroundcolor=\color{backgroundColour},   
+    commentstyle=\color{mGreen},
+    keywordstyle=\color{blue},
+    numberstyle=\tiny\color{mGray},
+    stringstyle=\color{mPurple},
+    basicstyle=\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    language=C
+}
+
+
+\title{CS 133 Homework 2}
+\author{Robert Geil \\ University of California, Los Angeles}
+\begin{document}
+\maketitle
+%----------------------------------------------------------------------------
+\subsubsection*{1. Given an integer array \code{a[]} of N elements of value between
+1 to m as the input, please write an efficient OpenMP function to generate 
+the histogram h for array \code{a[]} such that \code{h[i]} is the number of elements in a 
+with value i ($1 \leq i \leq m$). The function header is: 
+\code{void histogram(int *a, int *h)} In addition, you can use constant 
+variables N and m in your function directly. Is there a possibility for race
+condition in your implementation? If so, how do you handle it?}
+In order to generate this histogram data, we can use a parallel for loop,
+incrementing the corresponding element in \code{h[]}. We do need to be concerned
+about incrementing the values within h, as multiple threads may access a given
+index at the same time, causing race conditions. We can use the \code{atomic}
+pragma to solve this, ensuring that only one thread at a time will update any
+given value in the resulting histogram array
+\begin{lstlisting}[style=CStyle]
+void histogram(int *a, int *h)
+{
+#pragma omp parallel for
+for(int i = 0; i<N; i++)
+{
+    int pos = a[i];
+    #pragma omp atomic
+    h[pos] ++;
+}
+}
+\end{lstlisting}
+%----------------------------------------------------------------------------
+\subsubsection*{2. Please write an OpenMP program to compute the numerical 
+value of the integration of the function $\frac{\sqrt{x}}{1+x^3}$ between 0 
+and 1 using 16 threads. Your goal is to make it as efficient as possible. 
+Please present two ways to deal with possible race conditions and compare 
+their efficiency.}
+In order to calculate this integration, we will use approximate Riemann sums,
+which in the limiting case will perform the exact integration. As in the
+previous question, we will use a parallel for loop with OpenMP.
+\begin{lstlisting}[style=CStyle]
+const double delta = 0.00000001; // Delta value
+double sum = 0;
+#pragma omp parallel for
+for(int i = 0; i<1/delta; i++)
+{
+    sum += delta*sqrt(i*delta)/(1 + pow(i*delta, 3));
+}
+\end{lstlisting}
+However, the above code contains a race condition, as the incrementing of
+sum is not atomic. To resolve this, we can take two approaches. One option
+is to use the \code{atomic} pragma, to ensure that sum is only updated by
+one thread at a time. To do this, we will remove some of the code from
+the addition and move it to a temporary variable, to ensure that the atomic
+portion of the code is smaller
+\begin{minipage}{\linewidth}
+\begin{lstlisting}[style=CStyle]
+const double delta = 0.00000001; // Delta value
+double sum = 0;
+#pragma omp parallel for
+for(int i = 0; i<1/delta; i++)
+{
+    double addition = delta*sqrt(i*delta)/(1 + pow(i*delta, 3));
+    #pragma omp atomic
+    sum += addition;
+}
+\end{lstlisting}
+\end{minipage}
+Another solution, and one that may be more performant, is to use a 
+\textit{reduction}, which will internally keep private variables for each
+thread and then reduce them by summing at the end.
+\begin{lstlisting}[style=CStyle]
+const double delta = 0.00000001; // Delta value
+double sum = 0;
+#pragma omp parallel for reduction(+:sum)
+for(int i = 0; i<1/delta; i++)
+{
+    sum += delta*sqrt(i*delta)/(1 + pow(i*delta, 3));;
+}
+\end{lstlisting}
+Based on the above programs, and the non-parallelized version,
+we get the following results on my local machine (2 cores, 4 threads)
+\begin{center}
+    \begin{tabular}{ |c|c|c| } 
+     \hline
+     Type & Time (ms) & Result \\ 
+     \hline
+        Sequential & 6764 & 0.523599\\
+        Parallel with Races & 2061 & 0.213654\\
+        Parallel Atomic & 8413 & 0.523599\\
+        Parallel Reduction & 1724 & 0.523599\\        
+     \hline
+    \end{tabular}
+\end{center}
+As we see from the above results, our race-condition parallel
+approach gave an incorrect value, while the remaining
+implementations gave the correct answer. Interestingly
+atomic updates were slower than a non-sequential version,
+while the reduction was fastest, improving even on the version
+with no synchronization. This is likely due to the fact that updating
+thread-local variables was faster than all threads contending for
+the same shared variable. Indeed, with the reduction, we had a
+speed-up of 3.92x, which is near the optimal 4x speedup expected over
+sequential code given the 4 threads available on the computer.
+\end{document}

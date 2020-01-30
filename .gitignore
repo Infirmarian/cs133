@@ -11,4 +11,9 @@
 *.bbl
 *.bib
 *.blg
+
+
 cs-133-20w
+
+# Archives
+*.tar.gz

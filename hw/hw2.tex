@@ -38,7 +38,7 @@
 \author{Robert Geil \\ University of California, Los Angeles}
 \begin{document}
 \maketitle
-%----------------------------------------------------------------------------
+%------------------------------------------------------------------------------
 \subsubsection*{1. Given an integer array \code{a[]} of N elements of value between
 1 to m as the input, please write an efficient OpenMP function to generate 
 the histogram h for array \code{a[]} such that \code{h[i]} is the number of elements in a 
@@ -64,7 +64,7 @@ for(int i = 0; i<N; i++)
 }
 }
 \end{lstlisting}
-%----------------------------------------------------------------------------
+%------------------------------------------------------------------------------
 \subsubsection*{2. Please write an OpenMP program to compute the numerical 
 value of the integration of the function $\frac{\sqrt{x}}{1+x^3}$ between 0 
 and 1 using 16 threads. Your goal is to make it as efficient as possible. 
@@ -137,4 +137,183 @@ thread-local variables was faster than all threads contending for
 the same shared variable. Indeed, with the reduction, we had a
 speed-up of 3.92x, which is near the optimal 4x speedup expected over
 sequential code given the 4 threads available on the computer.
+%------------------------------------------------------------------------------
+\subsubsection*{3. Given the following OpenMP program (segment) running on 
+four CPU cores using four threads, assuming that the computation of function
+\code{f(i, j)} takes one minute on a single CPU core, and we ignore that scheduling
+overhead. You are asked to experiment with different scheduling methods. 
+Please estimate the completion time under each of the following schedule schemes}
+\begin{minipage}{\linewidth}
+\begin{lstlisting}[style=CStyle]
+#pragma omp parallel for
+for (int i = 0; i < 12; i++)
+    for (int j = 0; j <= i; j++)
+        a[i][j] = f(i, j);
+\end{lstlisting}
+\end{minipage}
+To solve this problem, we will use colored asterisks (\textcolor{blue}{*}).
+Each asterisk will represent a single minute of execution, with colors
+\textcolor{red}{red}, \textcolor{blue}{blue}, \textcolor{green}{green} and
+\textcolor{violet}{violet} representing each of the 4 threads.
+\subsubsection*{a. default scheduling}
+The default scheduling algorithm in OpenMP is static, where each thread is
+allocated a fixed portion of the loop at compile time. This is divided by
+the loop size, such that thread 1 gets the first $N/4$ iterations, thread
+two gets then next $N/4$ and so forth. With this workload, we see that will
+be split up\\
+\code{
+0 \textcolor{red}   {*}\\
+1 \textcolor{red}   {**}\\
+2 \textcolor{red}   {***}\\
+3 \textcolor{blue}  {****}\\
+4 \textcolor{blue}  {*****}\\
+5 \textcolor{blue}  {******}\\
+6 \textcolor{green} {*******}\\
+7 \textcolor{green} {********}\\
+8 \textcolor{green} {*********}\\
+9 \textcolor{violet}{**********}\\
+10\textcolor{violet}{***********}\\
+11\textcolor{violet}{************}
+}
+\begin{center}
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        red&blue&green&violet \\
+        \hline
+        6 & 15 & 24 & 33 \\
+        \hline
+    \end{tabular}
+\end{center}
+As can be seen above, this is a unbalanced scheduling. Since the work for
+each iteration is not equal, and is rather back-loaded, the red thread gets
+little work and finishes in 6 minutes, while the violet thread takes a full
+33 minutes, providing our bottleneck, and meaning that the entire program
+will finish in \textbf{33 minutes}
+\subsubsection*{b. schedule (dynamic, 2)}
+With a dynamic schedule, each thread is first given a number of iterations
+(2 in this case), and then whenever a thread finishes, they are assigned another
+chunk to work on. This seheduling gives us the following\\
+\begin{minipage}{\linewidth}
+\code{0 \textcolor{red}   {*}\\
+1 \textcolor{red}   {**}\\
+2 \textcolor{blue}  {***}\\
+3 \textcolor{blue}  {****}\\
+4 \textcolor{green} {*****}\\
+5 \textcolor{green} {******}\\
+6 \textcolor{violet}{*******}\\
+7 \textcolor{violet}{********}\\
+8 \textcolor{red}   {*********}\\
+9 \textcolor{red}   {**********}\\
+10\textcolor{blue}  {***********}\\
+11\textcolor{blue}  {************}
+}
+\end{minipage}
+\begin{center}
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        red&blue&green&violet \\
+        \hline
+        22 & 30 & 11 & 15 \\
+        \hline
+    \end{tabular}
+\end{center}
+With the above, we see that the work is more evenly distributed. Since red
+finishes before the others, it gets a larger chunk and doesn't idle, as it
+did in the previous example. Here the slowest thread is blue, which takes
+7 minutes for the first chunk it is assigned, and then 23 minutes for the
+second chunk, giving us a total time of \textbf{30 minutes}, an improvement
+of almost 10\% over the static scheduling
+\subsubsection*{c. schedule (guided, 1)}
+Guided scheduling first assigns the number of total iterations divided by
+the number of threads ($12/4 = 3$ in this case), and then proceeds to assign
+the following as the number of remaining iterations divided by the number
+of threads, with a minimum size. In this case, our minimum is one iteration.\\
+\code{
+0 \textcolor{red}   {*}\\
+1 \textcolor{red}   {**}\\
+2 \textcolor{red}   {***}\\
+3 \textcolor{blue}  {****}\\
+4 \textcolor{blue}  {*****}\\
+5 \textcolor{green} {******}\\
+6 \textcolor{green} {*******}\\
+7 \textcolor{violet}{********}\\
+8 \textcolor{red}   {*********}\\
+9 \textcolor{blue}  {**********}\\
+10\textcolor{green} {***********}\\
+11\textcolor{violet}{************}
+}
+\begin{center}
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        red&blue&green&violet \\
+        \hline
+        15 & 19 & 24 & 20 \\
+        \hline
+    \end{tabular}
+\end{center}
+This provides us the most efficient of the three options we've looked at so
+far. Here we can see that the maximum time is for green, giving us our
+total time of \textbf{24 minutes}. This is the closest we have seen to the
+optimal solution, which is 19.5 minutes.
+%------------------------------------------------------------------------------
+\subsubsection*{4. How one may use large memory bandwidth to hide high memory 
+latency? Please outline two ways and discuss the additional resources needed.}
+Large bandwidth can compensate for a high latency via two methods. Firstly,
+with a high bandwidth, one can do significant \textbf{prefetching}, allowing
+required resources to be pulled into cache before they are needed. This
+requires that there is at least some spatial locality of data, so that large
+chunks can be pulled in, hopefully containing data that will be required in the
+future. This also requires a large-enough cache to hold the additional data
+that is fetched. Another way to use bandwidth to mitigate latency is with the
+use of \textbf{multithreading}. By having multiple threads working on the
+problem at the same time, while one thread is processing data, another thread
+can be waiting for data to arrive across the bus. Additionally, with multiple
+threads, data can be fetched at once for multiple threads, ammortizing the cost
+of waiting for latency across the threads. However, this requires a processor
+that is capable of very rapidly switching context between threads, and needs
+the programmer to re-write the program to support multithreading
+%------------------------------------------------------------------------------
+\subsubsection*{5. Given the baseline processor described in Lecture 5 (1 Ghz 
+clock frequency with two multiply-add units), assuming that it has a cache of 
+32KB with a cache line size of 64B (16 words), if we want to perform the 
+dot-product of two integer vectors of length 1024 each, what is the best memory
+layout to achieve the highest performance? (Note that each integer is 
+1 word = 4B)}
+Given the above considerations, the best way to store the vectors to multiply
+is as packed as possible. However, since we don't have data reuse (as each
+value is only multiplied once), the only delay will be loading into memory
+initially. Assuming that each vector is initially in DRAM, and the cache line
+size of 16 words, we will be required to do at minimum $\frac{1024*2}{16} = 128$
+accesses. This requires $12.8 \mu s$ to load into cache. From there, each pair
+once it has been loaded to cache must be loaded from cache (1ns) and computed
+($\frac{1}{10^9} = 1ns$). Since there are two ALUs, this must only be done 512
+times, giving us a total time of $13.312 \mu$. This assumes the optimal memory
+layout is to have each vector laid out in contiguous memory. We can see that
+interleaving the two won't introduce any performance improvement. Since each
+piece of data must be fetched from DRAM, interleaving would only serve to
+benefit in that computation could be begun at once (since we don't have to wait
+for two fetches for the two vectors starting values). However, without a
+processor that can do out-of-order execution, we cannot begin the next fetch
+while processing the current data, so the point is moot.
+%------------------------------------------------------------------------------
+\subsubsection*{6. Given the processor in \#5, if we want to multiply two 
+integer matrices of 1024x1024 each, please compute the best tile size, and 
+estimate the peak performance (in terms of GOP/sec) for the tiled matrix 
+multiplication program discussed in Lecture 5.}
+Given the constraints from lecture, we see that our performance is equal to
+$\frac{2n^3} {(2N + 2) * n^2}$ which is roughly proportional to 
+$b \approx n/N$. As such, we want to maximize $b$ while ensuring that A, B and
+C can all fit in cache. Therefore we have the constraing that $3b^2 \leq M$, or
+in other words $b \leq \sqrt{M/3}$ As $M$ is 32,000 bytes, so we see that 
+$b \approx 103$ bytes, or \textbf{25 words}. The number of movements from
+DRAM to cache are
+\begin{equation}
+    (2b + 2) * n^2 = (2*25 + 2)*1024^2 = 54,525,952
+\end{equation}
+Dividing by the cache line size of 64B gives us $851,968$ lines to move,
+which takes about 85.1968 ms. Furthermore, the total number of computations
+are $2n^3 = 2*1024^3 = 2,147,483,648$. Given that our CPU can do 2 billion
+calculations per second (2 ALUs at 1GHz), this adds an additional 1,073.74 ms.
+Therefore our total time is about 1.1589 seconds. Dividing our number of
+operations by that value gives us a result of \textbf{$\approx$2.489 GOPs}
 \end{document}

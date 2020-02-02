@@ -17,3 +17,6 @@ cs-133-20w
 
 # Archives
 *.tar.gz
+
+# Compiled files
+gemm

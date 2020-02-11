@@ -1,0 +1,103 @@
+\documentclass[titlepage]{article}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    urlcolor=blue,
+}
+\urlstyle{same}
+\usepackage{xcolor}
+\usepackage{listings}
+\def\code#1{\texttt{#1}}
+\definecolor{mGreen}{rgb}{0,0.6,0}
+\definecolor{mGray}{rgb}{0.5,0.5,0.5}
+\definecolor{mPurple}{rgb}{0.58,0,0.82}
+\definecolor{backgroundColour}{rgb}{0.95,0.95,0.92}
+\usepackage{minted}
+
+\title{CS 133 Homework 3}
+\author{Robert Geil \\ University of California, Los Angeles}
+\begin{document}
+\maketitle
+%------------------------------------------------------------------------------
+\subsubsection*{1. Why do we need the concept of \textit{communicator} in MPI?
+What is the default communicator? Assuming that we have 16 processors involved
+in the parallel computation, please provide the MPI code to create 4
+communicators such that all processors with identical rank mod 4 are in the
+same communicator, where rank is the processor ID in the default communicator}
+A \textit{communicator} defines a communication domain, which describes the set
+of processors which can interconnect with each other. Since each processor 
+doesn't have shared memory, there needs to be some explicit grouping of
+processors that can send and receive data. The default communicator, 
+\code{MPI\_COMM\_WORLD} is a basic communicator that contains all processors.
+Custom communicator sets can also be built using the function
+\code{MPI\_Comm\_split()}
+\begin{minted}[linenos, bgcolor=backgroundColour]{C}
+#include <mpi.h>
+// Get the rank of each communicator
+int world_rank;
+MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+// Calculate the new communicator they are part of
+int new_comm_index = world_rank % 4;
+// Create the new communicator and split
+MPI_Comm new_communicator;
+MPI_Comm_split(MPI_COMM_WORLD, new_comm_index,\
+                world_rank, &new_communicator);
+\end{minted}
+The above code first gets the rank of each process, then calculates the new
+communicator by modding that value by 4. From there, we invoke
+\code{MPI\_Comm\_split()}, passing the original communicator
+\code{MPI\_COMM\_WORLD} along with our rank, the new communicator index to join
+and a reference to our new communicator. This stacks on the existing
+communicator such that each processor has both a rank in the default
+communicator as well as a rank in our new communicator, both of which can be
+accessed through the \code{MPI\_Comm\_rank()} function
+%------------------------------------------------------------------------------
+\subsubsection*{2. Given a list L of k*N integers of value between 1 to m as
+the input evenly distributed among k processors stored in their local file
+systems, please write an efficient MPI program to generate the histogram h of
+list L at processor 0. Please make your function as efficient as possible, and
+highlight the MPI functions that you are using.}
+\begin{minipage}{\linewidth}
+\begin{minted}[linenos]{C}
+#include <mpi.h>
+#include <stdlib.h>
+#include <string.h>
+// L is an array of N integers, each between 1 and m
+int* histogram(int* L, int N, int m)
+{
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    int* hist = (int*) malloc(sizeof(int) * m);
+    memset(hist, 0, sizeof(int)*m);
+    // Accumulate into each index of the array m
+    // This is done per-processor
+    for(int i = 0; i<N; ++i)
+    {
+        hist[L[i]+1]++;
+    }
+    // Reduce to the root (0) process, summing each individual
+    // histogram and storing in hist
+    MPI_Reduce(hist, hist, m, MPI_INT, \
+               MPI_SUM, 0, MPI_COMM_WORLD);
+    
+    // Free memory and return nullptr, except for root where
+    // we return a pointer to the histogram
+    if(rank){
+        free(hist);
+        hist = 0;
+    }
+    return hist;
+}
+\end{minted}
+\end{minipage} \\\\
+The above program takes the locally available portions of the list and creates
+a histogram of the local portion. From there, we use the MPI function 
+\code{MPI\_Reduce} to reduce by summation all of the elements in hist, placing
+them in the root process. \code{MPI\_Reduce} distributes the work
+across the processors, such that for example we aggregate (0, 1) $->$ 0 and
+(2, 3) $->$ 2 in one step, then just need to aggregate 0 and 2, meaning that
+we only need $\log(k)$ steps for $k$ processors. This makes it more efficient
+than manually passing all the arrays to process 0.
+%------------------------------------------------------------------------------
+
+\end{document}

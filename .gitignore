@@ -12,6 +12,9 @@
 *.bib
 *.blg
 
+# Mint generated files
+_minted-*/
+
 
 cs-133-20w
 

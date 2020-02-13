@@ -134,5 +134,71 @@ The basic sequential time complexity for this matrix multiplication is
 $\Theta(N^3)$. In addition, we are using \textit{Cannon's algorithm}, which
 requires that we shift each block to the right neighbor and receive from the
 left. This means that we will perform K shiftings over the course of the
-multiplication. 
+multiplication each of size $\frac{N^2}{K^2}$, therefore giving our
+communication time of $\Theta(\frac{N^2}{K})$. Our isoefficiency function
+therefore gives us
+\begin{equation}
+    n^3 \geq \frac{Cpn^2}{K}
+\end{equation}
+which is equivelent to
+\begin{equation}
+    n \geq CK
+\end{equation}
+since the number of processors $p$ is equal to $K^2$.
+We can then derive the scalability function using
+\begin{equation}
+    \frac{M(CK)}{K^2} = \frac{C^2K^2}{K^2} = C^2
+\end{equation}
+Therefore we see that this solution scales very well, as it doesn't increase
+communication overhead as more processors are added, since the scalability
+function has no reliance on $K$. This makes sense, since as the size of the
+mesh of processors increases, the amount of data that must be passed remains
+constant, since an increase in size corresponds to a decrease in the individual
+N/K blocks that a processor must compute.
+%------------------------------------------------------------------------------
+\subsubsection*{5. In Lecture 9, we discussed the example shown on the right,
+which has a loop pipelining initiation interval equal to 2. If we only want to
+output d[SIZE], can you rewrite the code so that the II becomes 1?}
+\begin{minted}[linenos]{C}
+i = 1;
+for (i=1; i<=SIZE; i++) {
+    d[i] = d[i-1]*v[i];
+}
+\end{minted}
+With the above code, we see that there is an II of 2, since for each step, we
+depend on waiting for the previous step to have stored the old value in 
+\code{d[i-1]}. This initiation interval is shown below
+\begin{center}
+    \begin{tabular}{|c|c|c|c|c|c|}
+        \hline
+        load v[i] & load d[i-1] & mult & store d[i] & & \\
+        \hline 
+        & & load v[i] & load d[i-1] & mult & store d[i]\\
+        \hline 
+    \end{tabular}
+\end{center}
+If we only care about the the final value, we can elimate the stores to $d$
+every iteration, replacing the above code with the following
+\begin{minted}[linenos]{C}
+    i = 1;
+    dsize = d[0];
+    for (i=1; i<=SIZE; i++) {
+        dsize = dsize * v[i];
+    }
+\end{minted}
+This will not store every round in $d$, meaning that the value of the array
+$d$ is not equal to the first version, however, it performs the same operation
+on the eventual output, that is multiplying the first element of $d$ with each
+element of $v$. This updated version gives us the II = 1, as shown below
+\begin{center}
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        load v[i]  & mult & & \\
+        \hline 
+        & load v[i]  & mult & \\
+        \hline 
+        & & load v[i]  & mult \\
+        \hline
+    \end{tabular}
+\end{center}
 \end{document}

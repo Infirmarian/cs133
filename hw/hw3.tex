@@ -99,5 +99,40 @@ across the processors, such that for example we aggregate (0, 1) $->$ 0 and
 we only need $\log(k)$ steps for $k$ processors. This makes it more efficient
 than manually passing all the arrays to process 0.
 %------------------------------------------------------------------------------
-
+\subsubsection*{3. For the E-cube algorithm for all-to-all personalized 
+communication discussed in Lectures 7 and 8, if we implement it on a 
+4-dimension hypercube, how many steps will the algorithm goes through? At Step
+7, which processor will processor 5 exchange messages?}
+The pseudo-code for the \textit{all-to-all personalized} communication is given
+below.
+\begin{verbatim}
+procedure ALL_TO_ALL_PERSONAL(d, my_id)
+begin
+    for i := 1 to 2^d - 1 do
+    begin
+        partner := my_id XOR i;
+        send M(my_id, partner) to partner;
+        receive M(partner, my_id) from partner;
+    end for;
+end ALL_TO_ALL_PERSONAL
+\end{verbatim}
+Given that this is taking place on a 4-dimension hypercube, in the example our
+value fo $d$ is 4. Therefore our inner loop iteration goes through 
+$2^4 - 1 = 15$ times. At step 7, we have $i=7$. We can find the id of the
+processor that $x$ is communicating with by taking $\textrm{id}(x) \oplus i$.
+In this case, we want $x= 5_{10} = 101_2$ and step $7_{10} = 111_2$ Therefore
+we can compute the processor that 5 is communicating with on step 7 will be
+$101 \oplus 111 = 010$, which translates to \textbf{processor 4}
+%------------------------------------------------------------------------------
+\subsubsection*{4. Consider the basic matrix multiplication algorithm for two
+NxN matrices A and B using KxK processors connected using a mesh network. 
+Assume that each processor already has data the corresponding N/K x N/K 
+sub-matrices of A and B, and only need to generate and store the resulting N/K
+x N/K sub-matrix locally. Please derive the isoefficiency relation and the
+scalability function. You may assume that N is a multiple of K}
+The basic sequential time complexity for this matrix multiplication is 
+$\Theta(N^3)$. In addition, we are using \textit{Cannon's algorithm}, which
+requires that we shift each block to the right neighbor and receive from the
+left. This means that we will perform K shiftings over the course of the
+multiplication. 
 \end{document}

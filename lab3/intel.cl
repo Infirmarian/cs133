@@ -3,40 +3,52 @@ __constant int kKernel = 5;
 __constant int kImSize = 224;
 __constant int kInImSize = 228;
 __constant int kOutImSize = 112;
+__constant int TJ = 2;
+__constant int TW = 2;
 
-__constant int alignment = 2048;
+__constant int kVectorImSize = kImSize/16;
 __kernel void CnnKernel(__constant float* input, __constant float* weight,
                __constant float* bias, __global float* output) {
   // your code goes here
-  __private float ualC[kImSize + alignment], ualC2[kImSize + alignment];
-  int offset = (int)ualC % alignment;
-  int offset2 = (int)ualC2 % alignment;
-  __private float* C = ualC + alignment - offset;
-  __private float* C2 = ualC2 + alignment - offset2;
-  int i = get_global_id(0);
-  int h = get_global_id(1)*2;
+  __local float16 C[kVectorImSize], C2[kVectorImSize];
+  int id = get_global_id(0);
+  int hv = get_global_id(1)*2;
   int size = get_global_size(0);
 
-//  printf("G1: %d, G2: %d\n", i, h);
-  for (int w = 0; w < kImSize; ++w){
-    C[w] = bias[i];
-    C2[w] = bias[i];
-  }
-  float l;
-  for (int j = 0; j < kNum; ++j) {
-    for (int w = 0; w < kImSize; ++w) {
-      for (int p = 0; p < kKernel; ++p) {
-        for (int q = 0; q < kKernel; ++q){
-          l = weight[i*kKernel*kKernel*kNum + j*kKernel*kKernel+ p*kKernel + q];
-          C[w] += l * input[j*kInImSize*kInImSize + kInImSize*(h + p) + w + q];
-          C2[w] += l * input[j*kInImSize*kInImSize + kInImSize*(h+1 + p) + w + q];
+  for (int i = id; i < kNum; i+=size) {
+    float16 biasv = (float16)(bias[i]);
+//    for (int h = 0; h < kImSize; h+=2) {
+      for (int w = 0; w < kVectorImSize; ++w){
+        C[w] = biasv;
+        C2[w] = biasv;
+      }
+    float where;
+    for (int j = 0; j < kNum; j+=TJ) {
+        for(int jj = j; jj < j + TJ; ++jj){
+            for (int p = 0; p < kKernel; ++p) {
+              for (int w = 0; w < kVectorImSize; w+=TW) {
+                for (int q = 0; q < kKernel; ++q){
+                  where = weight[i*kKernel*kKernel*kNum + jj*kKernel*kKernel+ p*kKernel + q];
+                  for(int ww = w; ww < w + TW; ++ww){
+                    __constant float* cptemp = input + (jj*kInImSize*kInImSize + kInImSize*(hv + p) + (ww<<4)+ q);
+                    *(C+ww) += where * vload16(0, cptemp);
+                    *(C2+ww) += where * vload16(0, cptemp+kInImSize);
+                  }
+                }
+              }
+            }
+          }
         }
+    float16 zeros = (float16)(0);
+    for(int w = 0; w<kVectorImSize; w++)
+    {
+      C[w] = max(max(C2[w], C[w]), zeros);
+    }
+    __local float* cO = (__local float*) C;
+    for (int w = 0; w < kOutImSize; ++w) {
+        output[i*kOutImSize*kOutImSize + (hv/2)*kOutImSize + w] = max (*cO, *(cO+1));
+        cO += 2;
       }
     }
-  }
-  for (int w = 0; w < kOutImSize; ++w) {
-    output[i*kOutImSize*kOutImSize + (h/2)*kOutImSize + w] = max(0.f, max(
-        max(C[w * 2  ], C2[ w * 2    ]),
-        max(C[w * 2 + 1], C2[w * 2 + 1])));
-  }
+//  }
 }

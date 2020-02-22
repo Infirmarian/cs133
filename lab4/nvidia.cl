@@ -15,11 +15,11 @@ __kernel void CnnKernel(__constant float* input, __constant float* weight,
   int i = get_global_id(0);
   int hv = get_global_id(1)<<1;
   int size = get_global_size(0);
+  int kInImSizeSquare = kInImSize*kInImSize;
   C[0] = C[1] = C[2] = C[3] = C[4] = C[5] = C[6] = C[7] = \
   C[8] = C[9] = C[10] = C[11] = C[12] = C[13] = (float16)(bias[i]);
   C2[0] = C2[1] = C2[2] = C2[3] = C2[4] = C2[5] = C2[6] = C2[7] = \
   C2[8] = C2[9] = C2[10] = C2[11] = C2[12] =  C2[13] = (float16)(bias[i]);
-  int prodSize = kInImSize*kInImSize;
   for (int w = 0; w < kVectorImSize; w+=TW) {
     for (int j = 0; j < kNum; j+=TJ) {
       float16 t1 = zeros;
@@ -27,18 +27,18 @@ __kernel void CnnKernel(__constant float* input, __constant float* weight,
       for (int p = 0; p < kKernel; ++p) {
         __constant float* wBase = weight + i*kKernel*kKernel*kNum + j*kKernel*kKernel+ p*kKernel;
         __constant float* wBase2 = wBase + kKernel*kKernel;
-        __constant float* cptemp = input + (j*prodSize + kInImSize*(hv + p) + (w<<4));
+        __constant float* cptemp = input + (j*kInImSizeSquare + kInImSize*(hv + p) + (w<<4));
         __constant float* cptempKIM = cptemp + kInImSize;
-        t1 += *(wBase) * vload16(0, cptemp) + *(wBase2) *vload16(0, cptemp + prodSize) +
-                  *(wBase+1) * vload16(0, cptemp+1) + *(wBase2+1) *vload16(0, cptemp + prodSize+1) +
-                  *(wBase+2) * vload16(0, cptemp+2) + *(wBase2+2) *vload16(0, cptemp + prodSize+2) +
-                  *(wBase+3) * vload16(0, cptemp+3) + *(wBase2+3) *vload16(0, cptemp + prodSize+3) +
-                  *(wBase+4) * vload16(0, cptemp+4) + *(wBase2+4) *vload16(0, cptemp + prodSize+4);
-        t2 += *(wBase) * vload16(0, cptempKIM) + *(wBase2) * vload16(0, cptempKIM+prodSize) +
-                  *(wBase+1) * vload16(0, cptempKIM+1) + *(wBase2+1) * vload16(0, cptempKIM+prodSize +1) +
-                  *(wBase+2) * vload16(0, cptempKIM+2) + *(wBase2+2) * vload16(0, cptempKIM+prodSize +2) +
-                  *(wBase+3) * vload16(0, cptempKIM+3) + *(wBase2+3) * vload16(0, cptempKIM+prodSize +3) +
-                  *(wBase+4) * vload16(0, cptempKIM+4) + *(wBase2+4) * vload16(0, cptempKIM+prodSize +4);
+        t1 += *(wBase) * vload16(0, cptemp) + *(wBase2) *vload16(0, cptemp + kInImSizeSquare) +
+                  *(wBase+1) * vload16(0, cptemp+1) + *(wBase2+1) *vload16(0, cptemp + kInImSizeSquare+1) +
+                  *(wBase+2) * vload16(0, cptemp+2) + *(wBase2+2) *vload16(0, cptemp + kInImSizeSquare+2) +
+                  *(wBase+3) * vload16(0, cptemp+3) + *(wBase2+3) *vload16(0, cptemp + kInImSizeSquare+3) +
+                  *(wBase+4) * vload16(0, cptemp+4) + *(wBase2+4) *vload16(0, cptemp + kInImSizeSquare+4);
+        t2 += *(wBase) * vload16(0, cptempKIM) + *(wBase2) * vload16(0, cptempKIM+kInImSizeSquare) +
+                  *(wBase+1) * vload16(0, cptempKIM+1) + *(wBase2+1) * vload16(0, cptempKIM+kInImSizeSquare +1) +
+                  *(wBase+2) * vload16(0, cptempKIM+2) + *(wBase2+2) * vload16(0, cptempKIM+kInImSizeSquare +2) +
+                  *(wBase+3) * vload16(0, cptempKIM+3) + *(wBase2+3) * vload16(0, cptempKIM+kInImSizeSquare +3) +
+                  *(wBase+4) * vload16(0, cptempKIM+4) + *(wBase2+4) * vload16(0, cptempKIM+kInImSizeSquare +4);
       }
       *(C+w) += t1;
       *(C2+w) += t2;
@@ -62,8 +62,8 @@ __kernel void CnnKernel(__constant float* input, __constant float* weight,
     C[13] = max(max(C2[13], C[13]), zeros);
 //  }
   __private float* cO = (__private float*) C;
+  output += i*kOutImSize*kOutImSize + (hv>>1)*kOutImSize;
   for (int w = 0; w < kOutImSize; ++w) {
-      output[i*kOutImSize*kOutImSize + (hv/2)*kOutImSize + w] = max (*cO, *(cO+1));
-      cO += 2;
+      *(output+w) = max (*(cO++), *(cO++));
     }
 }

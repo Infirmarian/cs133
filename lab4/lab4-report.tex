@@ -1,0 +1,152 @@
+
+\documentclass[letterpaper,twocolumn,10pt]{article}
+\usepackage{usenix2019_v3}
+
+% to be able to draw some self-contained figs
+\usepackage{tikz}
+\usepackage{amsmath}
+\usepackage{pgfplots}
+\def\code#1{\texttt{#1}}
+% inlined bib file
+\usepackage{filecontents}
+
+\begin{document}
+%-------------------------------------------------------------------------------
+
+%don't want date printed
+\date{}
+
+% make title bold and 14 pt font (Latex default is non-bold, 16 pt)
+\title{\Large \bf Convolutional Neural Network Acceleration with OpenCL
+and GPU Processing}
+
+%for single author (just remove % characters)
+\author{
+{\rm Robert Geil}\\
+University of California, Los Angeles
+} % end author
+
+\maketitle
+
+%-------------------------------------------------------------------------------
+\begin{abstract}
+%-------------------------------------------------------------------------------
+Convolutional Neural Networks or \textbf{CNNs} are used by deep learning to
+complete many tasks, and especially image recognition. In this lab, we 
+accelerated the performance of a CNN using OpenCL, running on an NVIDIA Tesla
+GPU. By applying techniques in the kernel code such as tiling, vectorization,
+and loop unrolling, we were able to improve performance from the base sequential
+case on a CPU of 11 GFlops to a peak of $\approx 1.012$ TFlops on the GPU.
+\end{abstract}
+
+%-------------------------------------------------------------------------------
+\section{Introduction}
+%-------------------------------------------------------------------------------
+
+Convolutional Neural Networks are used in a broad range of fields to perform
+automatic categorization of images and data, including image classification,
+interpretation of medical results and other applications. As such, the process
+of running a CNN would benefit greatly from improvements in performance. In
+order to drive some of this performance, we turn to a language called
+\textit{OpenCL}. OpenCL, created by an industry group including vendors like
+AMD, Intel, NVIDIA, Google, and others, is a programming language used for
+heterogeneous computing. With OpenCL, one program can be adapted and run on a
+CPU, GPU, FPGA or other computing device, affording flexibility and
+portability. Using this language, we will improve and parallelize the
+performance of our CNN code. OpenCL also relies on a Host-Kernel system, where
+setup code to initialize the system is run on a CPU-based host, while the
+Kernels can be more specialized machines like GPUs or FPGAs. As such, our focus
+is on writing the Kernel code for performance, rather than host code.
+
+%-------------------------------------------------------------------------------
+\section{Machine Specifications}
+%-------------------------------------------------------------------------------
+
+The machine for which the code was optimized is an Amazon Web  Services (AWS)
+\textit{g3s.xlarge} virtual machine. This machine, in addition to a virtualized
+Intel Xeon CPU with 4 cores/8 threads, also has an NVIDIA Tesla M60 graphics
+card. This card is a high-end solution, and includes 8 GB memory, as well as
+about 50 Kb local memory. There are 2048 CUDA cores, allowing for massive
+amounts of parallelism.
+
+%-------------------------------------------------------------------------------
+\section{Solution Approach}
+%-------------------------------------------------------------------------------
+To begin with the optimization, I ported over the code from Lab 3, which
+already contained improvements such as tiling, vectorization, and loop
+reordering. However, while the code reached $\approx180$ GFlops running on an
+Intel CPU, the code barely reached 10 GFlops on the NVIDIA GPU. As such,
+several techniques needed to be applied to improve performance further.
+
+\subsection{Global Workgroup Dimensions}
+With the CPU code, there were only 8 threads working on the task, and as such
+I broke the \code{i} loop out among the threads, so there would be 256
+iterations of work done. However, while this level of parallelism was
+sufficient for the processor where only 8 threads could work simultaneously,
+this massively underutilized the GPU, where there are 2,048 cores. Therefore,
+I split up the work by breaking not only the \code{i} loop, but also every
+other iteration of the \code{h} loop into separate threads, giving a total of
+$256*112 = 28672$ chunks of work. This brings us closer to one thread per work
+item, as each SM has 2048 threads, and the GPU contains 16 SMs. After applying
+this improvement, the code reached \textbf{about 83 GFlops}.
+
+\subsection{Loop Unrolling}
+One of the easiest techniques for squeezing out more performance is loop
+unrolling. In order to take advantage of this, I unrolled the innermost two
+loops of the convolution step, those being the inner tile of the \code{j} loop,
+and the \code{q} loop. Performing this unrolling gave a dramatic performance
+improvement, reaching up to \textbf{approximately 400 GFlops}.
+
+\subsection{Loop Reordering}
+Since the access patterns changed with the loop unrolling, it makes sense to
+also change the order of the loops to maintain maximum locality. To do this, I
+reordered such that the \code{w} loop was in the outermost position, and
+removed the tiling of this loop. This alteration gave another approximately
+300 GFlops of performance, for a total of \textbf{700 GFlops}.
+
+\subsection{Register Allocation}
+The OpenCL compiler for the GPU Kernel doesn't seem to be as aggressive about
+caching intermediate values in registeres. With the new loop unrolling, there
+are many more additions and multiplications performed within the innermost
+loop, and a perfectly optimizing compiler would be able to store these
+calculations in registers. In order to improve the compiler's performance, I
+took some common multiplications and additions and precomputed them, storing as
+local variables before the execution of the main loop. For example, I calculate
+\code{kInImSize*kInImSize} so that product doesn't need to be performed
+multiple times within the loop. I also use pointer-arithmatic, which ends up
+being faster for the compiler to implement. By utilizing more registers for
+intermediate values, I was able to reach a final performance of 
+\textbf{about 1.01 TFlops}.
+%-------------------------------------------------------------------------------
+\section{Work Group}
+%-------------------------------------------------------------------------------
+For our work group, we had a global dimension of 256x112, for a total of
+28,672. Within each group, we have a single work-item. This closely
+approximates the dimensions of the actual NVIDIA GPU, where there are 16 
+multiprocessors, each with 2048 threads, giving a total of 32,768. This means
+we have a roughly 87\% utilization of the GPU. One reason these numbers do not
+match up is that our problem space is not easily decomposed into the 32,768
+units available on the GPU. Since the amount of work we performed doesn't
+evenly divide into the number of threads on the GPU, there will always be some
+overhead for maldistribution of work, even if each thread processed a smaller
+work-item.
+%-------------------------------------------------------------------------------
+\section{Results}
+%-------------------------------------------------------------------------------
+As previously stated, our optimizations in workgroup dimensions, register
+allocation, loop unrolling and loop reordering managed to produce an final
+performance of $\approx 1.012$ TFlops. As such, we see nearly a 100x
+improvement over the original sequential code written in C.
+%-------------------------------------------------------------------------------
+\subsection{Challenges}
+Some of the challenges I faced in this project was accurately performing
+pointer arithmatic to improve performance. It was difficult to correctly
+manipulate the pointers to get a correct answer without causing segmentation
+faults. Additionally, pushing register allocation required a difficult and
+incremental process, as each intermediate value that I saved to registers had a
+different impact on performance, depending on the operation performed. 
+Additionally, I had to be careful not to spill registers, as that resulted in
+severe performance degredation, on the order of 200 GFlops.
+%-------------------------------------------------------------------------------
+\end{document}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -22,8 +22,10 @@ void CnnKernel(
 
   // Convolution
     for (int j = 0; j < kNum; ++j) {
+#pragma ACCEL false_dependence variable=C
       for (int h = 0; h < kImSize; ++h) {
-#pragma ACCEL pipeline II=1
+#pragma ACCEL parallel factor=4
+#pragma ACCEL false_dependence variable=C
         for (int w = 0; w < kImSize; ++w) {
 	  float temp = 0.f;
 #pragma ACCEL parallel factor=25 reduction=temp
@@ -37,10 +39,9 @@ void CnnKernel(
     }
 
   // ReLU
-float* nC = (float*)C;
-#pragma ACCEL parallel factor=64
+#pragma ACCEL false_dependence variable=C
     for (int h = 0; h < kImSize*kImSize; ++h) {
-        nC[h] = max(0.f, nC[h]);
+        ((float*)C)[h] = max(0.f, ((float*)C)[h]);
     }
 
   // Max pooling

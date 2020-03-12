@@ -23,28 +23,23 @@ void CnnKernel(
   // Convolution
     for (int j = 0; j < kNum; ++j) {
       for (int h = 0; h < kImSize; ++h) {
-#pragma ACCEL pipeline II=1
         for (int w = 0; w < kImSize; ++w) {
-	  float temp = 0.f;
-#pragma ACCEL parallel factor=25 reduction=temp
           for (int p = 0; p < kKernel; ++p) {
             for (int q = 0; q < kKernel; ++q)
-              temp += weight[i][j][p][q] * input[j][h + p][w + q];
+              C[h][w] += weight[i][j][p][q] * input[j][h + p][w + q];
           }
-	  C[h][w] += temp;
         }
       }
     }
 
   // ReLU
-float* nC = (float*)C;
-#pragma ACCEL parallel factor=64
-    for (int h = 0; h < kImSize*kImSize; ++h) {
-        nC[h] = max(0.f, nC[h]);
+    for (int h = 0; h < kImSize; ++h) {
+      for (int w = 0; w < kImSize; ++w) {
+        C[h][w] = max(0.f, C[h][w]);
+      }
     }
 
   // Max pooling
-//#pragma ACCEL parallel factor=64
     for (int h = 0; h < kOutImSize; ++h) {
       for (int w = 0; w < kOutImSize; ++w) {
         output[i][h][w] = max(

@@ -38,7 +38,7 @@ provided by Xilinx, as well as Merlin, a similar tool using preprocessor
 directives. By applying techniques in the kernel code, such as pipelining and
 parallelism, as well as utilizing local memory, we were able to improve
 performance on the simulation of the FPGA from the base of about 0.01 GFlops
-to around 1.2 to 5 GFlops.
+to around 1.2 to 9.1 GFlops.
 \end{abstract}
 
 %-------------------------------------------------------------------------------
@@ -103,6 +103,15 @@ Based on my knowledge of OpenCL with Vitis, there is no way to explicitly
 require parallelism. Instead, parallelism is performed automatically when loops
 are unrolled. This is a major difference from the Merlin platform, which will
 be discussed later on.
+\subsubsection{Differences from Lab 3 and 4}
+The strategies approached in this lab were quite different from labs 3 and 4.
+Firstly, for the FPGA pipelining was an explicitly denoted process, whereas it
+was implied for the more traditional models of GPU and CPU. Furthermore, I was
+more unsure of the memory stucture of the FPGA, and was therefore not able to
+optimize as well as for the GPU and CPU. Finally, parallelization was more
+explicit in the GPU and CPU OpenCL models, where we needed to specify thread
+ids and divide work among them. By comparison, with the FPGA model
+parallelization is performed automatically via loop unrolling.
 \subsubsection{Results}
 With the pipelining and local memory applied to the problem, I was able to
 reach a final performance of approximately 1.2 GFlops. While this is quite
@@ -119,13 +128,106 @@ the FPGA chip, as seen by the utilization of resources
         Percentage & 3 & ~0 & ~0 & 16 \\ \hline
     \end{tabular}
 \end{center}
-%-------------------------------------------------------------------------------
 \subsection{Merlin}
-The Merlin 
+The Merlin Compiler is quite different from the OpenCL Vitis implementation.
+Firstly, it uses preprocessor \code{\#pragma} statements as opposed to
+\code{\_\_attribute\_\_} which is used in OpenCL.
+\subsubsection{Parallelism}
+One of the first optimizations performed was to use the preprocessor directive
+\code{\#pragma ACCEL parallel factor=25 reduction=temp} which parallelized the
+innermost loops of the convolution step and reduced to variable \code{temp}.
+\code{temp} was then added to \code{C[h][w]} to continue the convolution step.
+This resulted in a speedup of from 0.06 to 1.21 GFlops. I also added a higher
+level pragma to parallelize the \code{w} loop by 4 times, which resulted in a
+further improvement to 4.8 GFlops.
+\subsubsection{Pipelining}
+Merlin performs automatic pipelining where possible, but sometimes it cannot
+infer that a dependency actually doesn't exist between multiple loop
+iterations. Since the loops \code{w} and \code{h} perfectly partition the array
+\code{C}, even though the same variable \code{C} is being used, there is no
+dependency since individual addresses of \code{C} are being updated. Therefore
+by adding the \code{false\_dependency} pragma, we were able to tell Merlin to
+use an II of 1 between loop iterations, which improved performance further to
+9.1 GFlops.
+\subsubsection{Resource Usage}
+With the final optimized version, I was able to reach a resource usage as shown
+below
+\begin{center}
+    \begin{tabular}{|c|c|c|c|c|}
+        \hline
+        & LUT & FF & DPS & BRAM \\ \hline
+        Usage & 90372 & 114013 & 717 & 391 \\ \hline
+        Percentage & 7 & 4 & 10 & 9 \\ \hline        
+    \end{tabular}
+\end{center}
+As can be seen, this is far superior to the utilization achieved by the OpenCL
+version, although still a mere fraction of the capability of the board. With
+this program, I was halted more by the immense amount of time required to
+compile each additional time, which greatly slowed my workflow.
+\subsubsection{Compiler Optimizations}
+The Merlin compiler is able to aggressively optimize the program, as can be
+seen from some of the reports it generates. For example, in the output from
+the file \code{merlin.rpt} we can see the optimizations that Merlin performed
+on the code
+\begin{verbatim}
+loop h (CnnKernel.cpp:26) 
+  loop w (CnnKernel.cpp:29) | parallel factor=4x, \
+                              pipeline II=1|
+    loop p (CnnKernel.cpp:32) | parallel factor=5x
+      loop q (CnnKernel.cpp:33) | parallel factor=5x 
+\end{verbatim}
+This shows that Merlin parallelized each of the loops \code{w}, \code{p} and
+\code{q}, with a factor of 4, 5 and 5 times respectively. Further, we can see
+that the \code{w} loop was pipelined with an II of 1. That optimization was
+possible due to our declaration of a false dependency on the array \code{C}.
+These help to improve performance in a couple of ways. The pipelining keeps
+the instruction pipe full, and allows processing to continue uninterrupted,
+giving a higher throughput of the overall system. For the parallelism, since
+multiple sections of the FPGA can be assigned the same work at the same time,
+multiple computations can be completed simultaneously, further helping to drive
+performance. 
 %-------------------------------------------------------------------------------
-\section{Results}
+\section{Comparison between Merlin and Vitis}
 %-------------------------------------------------------------------------------
-
+Having used both the Merlin and Vitis workflows to write FPGA code, there are
+significant differences in the programmer and performance perspective.
+\subsection{Coding Style}
+There are several differences that appear between the two versions in terms of
+their coding style. Firstly, the Merlin compiler was easier to get started with
+and work with, as it synthesized from C++ to the FPGA, as compared to OpenCL
+for Vitis. Furthermore, the use of preprocessor directives was more explicit
+and easier to understand than the \code{\_\_attribute\_\_} interface provided
+by Vitis and OpenCL. Additionally, at least as far as my understanding, the
+Merlin compiler abstracts certain contiguous memory accesses, performing a
+burst access to global memory. In comparison, Vitis required that I write by
+hand a loop to copy into a local memory buffer. This definitely increases the
+appeal in terms of programmer experience of Merlin.
+\subsection{Code Changes}
+Vitis often had implicit parallelism, as with the loop unrolling, making it
+more difficult to optimize. By comparison, with Merlin the \code{parallel}
+pragma indicated the parallelized loops, making it easier to understand the
+flow and optimization of the code.
+\subsection{Reporting}
+The Merlin report was much easier to read and more informative than the reports
+generated by Vitis. With the Merlin report, information like potential false
+dependencies and actual function names were provided, making it easier to
+quickly spot where potential optimizations could occur. In comparison, the
+reports generated by Vitis were much more verbose, but this made them harder to
+understand and optimize, another point of friction for the more casual
+developer.
+\subsection{Performance}
+In terms of performance, both implementations were sadly far below the optimal
+level available on the FPGAs, for a number of reasons. However, it was still
+the case that the Merlin version was able to run nearly 10x faster than the
+Vitis version, with a similar amount of programming effort.
+\begin{center}
+    \begin{tabular}{|c|c|}
+        \hline
+        Version & Speed \\ \hline
+        Vitis & 1.2 GFlops \\ \hline
+        Merlin & 9.1 GFlops \\ \hline
+    \end{tabular}
+\end{center}
 %-------------------------------------------------------------------------------
 \subsection{Challenges}
 %-------------------------------------------------------------------------------
@@ -140,7 +242,7 @@ challenging. Finally, in comparison to the CPU and GPU versions, the FPGA
 presented an entirely new architecture which I was more unfamiliar with, and 
 which therefore was more difficult to optimize for, since typical patterns like
 memory tiling and unrolling didn't seem to have the same effect as on a CPU or
-GPU.
+GPU. 
 %-------------------------------------------------------------------------------
 \end{document}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

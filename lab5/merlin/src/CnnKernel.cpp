@@ -27,10 +27,13 @@ void CnnKernel(
 #pragma ACCEL parallel factor=4
 #pragma ACCEL false_dependence variable=C
         for (int w = 0; w < kImSize; ++w) {
+          float temp = 0.f;
+#pragma ACCEL parallel factor=25 reduction=temp
           for (int p = 0; p < kKernel; ++p) {
             for (int q = 0; q < kKernel; ++q)
-              C[h][w] += weight[i][j][p][q] * input[j][h + p][w + q];
+              temp += weight[i][j][p][q] * input[j][h + p][w + q];
           }
+          C[h][w] += temp;
         }
       }
     }
